@@ -1,4 +1,4 @@
-FROM node:18-slim
+FROM node:20-slim
 
 # Baileys needs "git" to fetch one of its dependencies (libsignal) directly
 # from GitHub, and needs git configured to use HTTPS instead of SSH since
