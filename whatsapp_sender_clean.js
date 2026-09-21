@@ -56,6 +56,17 @@ const state = {
     number: null,       // e.g. "919876543210"
 };
 
+// ---- In-memory broadcast progress, read by GET /broadcast-progress --------
+// Lets the PHP/frontend show a live "X% sent" loader while a single
+// /api/php-broadcast/send request is still running (it can take a couple of
+// minutes for a large batch because of the human-like delay between sends).
+const broadcastProgress = {
+    inProgress: false,
+    total: 0,
+    sent: 0,
+    failed: 0,
+};
+
 let sock = null;
 let starting = false; // guards against overlapping start() calls from /refresh-qr
 
@@ -193,6 +204,13 @@ app.post('/api/php-broadcast/send', async (req, res) => {
     let sent = 0;
     let failed = 0;
 
+    // Reset progress for this batch so a poller can show a live "X% sent"
+    // loader while this request is still running.
+    broadcastProgress.inProgress = true;
+    broadcastProgress.total = recipients.length;
+    broadcastProgress.sent = 0;
+    broadcastProgress.failed = 0;
+
     for (const r of recipients) {
         const name = r.name || 'Patient';
         const phone = r.phone || '';
@@ -201,6 +219,7 @@ app.post('/api/php-broadcast/send', async (req, res) => {
         if (!phone || !message) {
             failed++;
             results.push({ name, status: 'FAILED', error: 'missing phone or message' });
+            broadcastProgress.failed = failed;
             continue;
         }
 
@@ -213,12 +232,23 @@ app.post('/api/php-broadcast/send', async (req, res) => {
             results.push({ name, status: 'FAILED', error: err.message || 'unknown error' });
         }
 
+        broadcastProgress.sent = sent;
+        broadcastProgress.failed = failed;
+
         // Randomized human-like gap between sends (2-5s), same behaviour
         // whatsapp_sender_curl.php's comments already describe.
         await sleep(2000 + Math.random() * 3000);
     }
 
+    broadcastProgress.inProgress = false;
+
     res.json({ success: true, sent, failed, results });
+});
+
+// Lightweight endpoint the PHP/frontend can poll while a broadcast is
+// running, to show a live progress loader instead of a silent 1-2 minute wait.
+app.get('/broadcast-progress', (req, res) => {
+    res.json(broadcastProgress);
 });
 
 app.get('/', (req, res) => {
