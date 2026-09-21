@@ -1,13 +1,12 @@
 FROM node:18-slim
 
-# Install Chromium
-RUN apt-get update && apt-get install -y \
-    chromium \
-    --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set Chrome path
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# Baileys needs "git" to fetch one of its dependencies (libsignal) directly
+# from GitHub, and needs git configured to use HTTPS instead of SSH since
+# this container has no SSH keys.
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && git config --global url."https://github.com/".insteadOf "git@github.com:" \
+    && git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
 
 # Set working directory
 WORKDIR /app
